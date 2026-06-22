@@ -42,6 +42,18 @@
     position: relative;
   }
 
+  /* Mobile: dvh tracks the *real* visible viewport (accounts for browser
+     chrome like Safari's address bar), and we allow vertical scrolling as
+     a safety net instead of clipping content that doesn't fit. */
+  @media (max-width: 480px), (max-height: 760px) {
+    body {
+      height: 100dvh;
+      max-height: none;
+      min-height: 100dvh;
+      overflow-y: auto;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   }
@@ -88,6 +100,12 @@
     display: flex;
     justify-content: center;
     padding-top: clamp(28px, 5vh, 48px);
+  }
+
+  @media (max-width: 480px), (max-height: 760px) {
+    .page-header {
+      padding-top: max(env(safe-area-inset-top, 0px), 32px);
+    }
   }
 
   .wordmark-center {
@@ -437,6 +455,14 @@
     display: flex;
     justify-content: center;
     z-index: 6;
+  }
+
+  @media (max-width: 480px), (max-height: 760px) {
+    .site-footer {
+      position: static;
+      margin-top: 28px;
+      padding-bottom: 24px;
+    }
   }
 
   .footer-link {
