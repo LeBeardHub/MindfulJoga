@@ -1,0 +1,37 @@
+[
+  {
+    "home": "Ecuador",
+    "away": "Cura\u00e7ao",
+    "home_score": 0,
+    "away_score": 0,
+    "status": "final"
+  },
+  {
+    "home": "Tunisia",
+    "away": "Japan",
+    "home_score": 0,
+    "away_score": 4,
+    "status": "final"
+  },
+  {
+    "home": "Spain",
+    "away": "Saudi Arabia",
+    "home_score": 4,
+    "away_score": 0,
+    "status": "final"
+  },
+  {
+    "home": "Belgium",
+    "away": "Iran",
+    "home_score": 0,
+    "away_score": 0,
+    "status": "final"
+  },
+  {
+    "home": "Uruguay",
+    "away": "Cape Verde Islands",
+    "home_score": 2,
+    "away_score": 2,
+    "status": "final"
+  }
+]
