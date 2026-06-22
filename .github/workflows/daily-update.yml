@@ -23,7 +23,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          pip install requests
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
       - name: Run daily update script
         env:
@@ -36,6 +38,6 @@ jobs:
         run: |
           git config user.name "mindful-joga-bot"
           git config user.email "actions@github.com"
-          git add -A audio/ scripts/ scores.json
+          git add -A audio/ scripts/ scores.json upcoming.json
           git diff --quiet --cached || git commit -m "Daily update: $(date -u +'%Y-%m-%d')"
           git push
