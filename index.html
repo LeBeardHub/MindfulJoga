@@ -625,5 +625,12 @@
   })();
 </script>
 
+<!-- Vercel Web Analytics — plain script-tag equivalent of @vercel/analytics'
+     inject(), since this site has no build step / npm install. -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+
 </body>
 </html>
