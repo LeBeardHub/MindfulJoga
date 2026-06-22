@@ -37,7 +37,8 @@ VOICE_ID = "jbEI5QkrMSKWeDlP27MV"  # Ryan — Deep and Meditative
 TTS_MODEL_ID = "eleven_v3"
 
 VOICE_SETTINGS = {
-    "stability": 0.40,
+    "stability": 0.32,  # lowered further from 0.40 — encourages slower, more
+                         # deliberate pacing and more natural variance in rhythm
     "similarity_boost": 0.75,
     "style": 0.35,
     "use_speaker_boost": True,
@@ -50,22 +51,34 @@ start their day caught up, calmly. Follow these rules exactly:
 
 VOICE & TONE:
 - Open with "Good morning" — this is specifically a morning ritual.
-- Warm, slow, unhurried. Short sentences. Lots of room to breathe.
+- Warm, slow, unhurried — slower than feels natural at first. Short sentences. Generous room to breathe between thoughts, not just between sections.
 - Address the listener directly as "you" at least 3-4 times in the script.
 - Never use score-anxiety language (no "DESTROYED," "STUNNING," "SMASHED," etc.)
   even for blowout results. A 6-0 win and a 0-0 draw get the same calm register.
 - This script will be read by ElevenLabs' v3 model, which understands bracketed
   audio tags like [softly], [whispers], [slowly], [gently], [sighs], [breathes in].
-  Use these tags throughout — roughly one per sentence or natural phrase, placed
-  right before the words they should affect. Favor calm/breathy tags: [softly],
+  Use [slowly] and [gently] more liberally than feels necessary — at least once per
+  2-3 sentences, not just once per paragraph. Favor calm/breathy tags: [softly],
   [gently], [slowly], [whispers]. Do NOT use unrelated emotional tags like
   [excited] or [happy] — this is a meditative read, not a performance.
-- Use ellipses (...) for natural hesitant pauses.
+- Use ellipses (...) generously for natural hesitant pauses — more than feels
+  strictly necessary on the page. Between major beats (after a score, before
+  moving to a new match), insert a standalone [pause] or [long pause] line.
+- Vary sentence length deliberately: a short, plain sentence after a longer
+  flowing one gives the reader's breath somewhere to land.
 
-MINDFULNESS LAYER (roughly 10% of total script — present but not dominant):
+MINDFULNESS LAYER (roughly 10-15% of total script — present but not dominant):
 - Open with a brief "settle in" moment: shoulders, jaw, permission to not be ready.
-- Include exactly 2 explicit breath cues with real pause timing
-  (one near the open, one before any closing section).
+- Include 2-3 breathing reminders across the script, but VARY how they're delivered —
+  don't repeat the same "breathe in... breathe out" phrasing each time. Mix:
+    (a) a literal, instructional cue ("Breathe in... and let it go.")
+    (b) an immersive, woven-in cue that doesn't sound like an instruction
+        (e.g. "Notice the air in the room before the next line. That's yours
+        to keep, however the match went.")
+    (c) a cue tied to the football itself (e.g. "Even the players take a
+        breath before a free kick. Take yours now.")
+  At least one breathing moment per script should NOT use the literal words
+  "breathe in" / "breathe out" — find a more textured, sensory way in.
 - Give every LOSING team a short (1-2 sentence) genuine consolation beat tied to
   football's actual rhythm — never generic, never minimizing. Something like:
   "there's almost always another match coming."
@@ -216,6 +229,23 @@ def generate_audio(script_text, api_key, output_path):
     log(f"Audio saved to {output_path}.")
 
 
+def save_scores_json(matches, output_path="scores.json"):
+    """Write a simple JSON file the live site can fetch to show real scores
+    in the cycling date/score pill, replacing the old hardcoded placeholder."""
+    simplified = []
+    for m in matches:
+        simplified.append({
+            "home": m["home"],
+            "away": m["away"],
+            "home_score": m["home_score"],
+            "away_score": m["away_score"],
+            "status": m["status"],  # "final" or "in_progress"
+        })
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(simplified, f, indent=2)
+    log(f"Scores saved to {output_path} ({len(simplified)} match(es)).")
+
+
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
@@ -234,6 +264,10 @@ def main():
         sys.exit(f"Missing required environment variable(s): {', '.join(missing)}")
 
     matches = fetch_yesterdays_matches(api_football_key)
+
+    # Always write the scores file, even if empty, so the live site never
+    # shows yesterday's (or older) stale placeholder data.
+    save_scores_json(matches)
 
     if not matches:
         log("No matches found for yesterday — skipping script/audio generation.")
