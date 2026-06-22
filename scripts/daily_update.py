@@ -105,10 +105,20 @@ def fetch_yesterdays_matches(api_key):
     }
 
     response = requests.get(f"{API_FOOTBALL_BASE}/fixtures", headers=headers, params=params)
+    log(f"Request URL: {response.url}")
+    log(f"Response status: {response.status_code}")
+
     if response.status_code != 200:
         raise RuntimeError(f"API-Football error {response.status_code}: {response.text}")
 
     data = response.json()
+
+    # Debug: show any API-level errors/warnings and the raw result count
+    if data.get("errors"):
+        log(f"API-Football reported errors: {data['errors']}")
+    log(f"API-Football 'results' count: {data.get('results')}")
+    log(f"Raw response (first 1500 chars): {str(data)[:1500]}")
+
     fixtures = data.get("response", [])
     log(f"Found {len(fixtures)} fixture(s).")
 
