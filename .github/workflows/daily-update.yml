@@ -36,6 +36,6 @@ jobs:
         run: |
           git config user.name "mindful-joga-bot"
           git config user.email "actions@github.com"
-          git add -A audio/ scripts/
+          git add -A audio/ scripts/ scores.json
           git diff --quiet --cached || git commit -m "Daily update: $(date -u +'%Y-%m-%d')"
           git push
