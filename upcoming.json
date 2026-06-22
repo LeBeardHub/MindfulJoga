@@ -1,10 +1,30 @@
 {
-  "matchday": "2026-06-22",
+  "matchday": "2026-06-23",
   "matches": [
     {
-      "home": "France",
-      "away": "Iraq",
-      "kickoff_utc": "2026-06-22T21:00:00+00:00"
+      "home": "Norway",
+      "away": "Senegal",
+      "kickoff_utc": "2026-06-23T00:00:00+00:00"
+    },
+    {
+      "home": "Jordan",
+      "away": "Algeria",
+      "kickoff_utc": "2026-06-23T03:00:00+00:00"
+    },
+    {
+      "home": "Portugal",
+      "away": "Uzbekistan",
+      "kickoff_utc": "2026-06-23T17:00:00+00:00"
+    },
+    {
+      "home": "England",
+      "away": "Ghana",
+      "kickoff_utc": "2026-06-23T20:00:00+00:00"
+    },
+    {
+      "home": "Panama",
+      "away": "Croatia",
+      "kickoff_utc": "2026-06-23T23:00:00+00:00"
     }
   ]
 }
