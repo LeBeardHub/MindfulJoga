@@ -6,8 +6,12 @@ name: Daily Mindful Joga Update
 # Cron format: minute hour day month weekday (all in UTC)
 on:
   schedule:
-    - cron: '0 11 * * *'
+    - cron: '0 11 * * *'   # kept as a backup trigger, but GitHub's scheduler
+                            # is documented as unreliable under load — see
+                            # repository_dispatch below for the reliable path
   workflow_dispatch: {}   # also allows manually triggering a run from the Actions tab
+  repository_dispatch:
+    types: [daily-trigger]  # triggered externally by cron-job.org — see README
 
 jobs:
   update:
