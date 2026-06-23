@@ -1,37 +1,23 @@
 [
   {
-    "home": "Ecuador",
-    "away": "Cura\u00e7ao",
-    "home_score": 0,
-    "away_score": 0,
+    "home": "New Zealand",
+    "away": "Egypt",
+    "home_score": 1,
+    "away_score": 3,
     "status": "final"
   },
   {
-    "home": "Tunisia",
-    "away": "Japan",
-    "home_score": 0,
-    "away_score": 4,
-    "status": "final"
-  },
-  {
-    "home": "Spain",
-    "away": "Saudi Arabia",
-    "home_score": 4,
-    "away_score": 0,
-    "status": "final"
-  },
-  {
-    "home": "Belgium",
-    "away": "Iran",
-    "home_score": 0,
-    "away_score": 0,
-    "status": "final"
-  },
-  {
-    "home": "Uruguay",
-    "away": "Cape Verde Islands",
+    "home": "Argentina",
+    "away": "Austria",
     "home_score": 2,
-    "away_score": 2,
+    "away_score": 0,
+    "status": "final"
+  },
+  {
+    "home": "France",
+    "away": "Iraq",
+    "home_score": 3,
+    "away_score": 0,
     "status": "final"
   }
 ]

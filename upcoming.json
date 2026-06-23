@@ -2,16 +2,6 @@
   "matchday": "2026-06-23",
   "matches": [
     {
-      "home": "Norway",
-      "away": "Senegal",
-      "kickoff_utc": "2026-06-23T00:00:00+00:00"
-    },
-    {
-      "home": "Jordan",
-      "away": "Algeria",
-      "kickoff_utc": "2026-06-23T03:00:00+00:00"
-    },
-    {
       "home": "Portugal",
       "away": "Uzbekistan",
       "kickoff_utc": "2026-06-23T17:00:00+00:00"
