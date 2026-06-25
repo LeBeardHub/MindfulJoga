@@ -42,12 +42,14 @@ ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 VOICE_ID = "jbEI5QkrMSKWeDlP27MV"  # Ryan — Deep and Meditative
 TTS_MODEL_ID = "eleven_v3"            # premium expressive model — used for the
                                        # main recap, where [tags]/pacing matter most
-UPCOMING_TTS_MODEL_ID = "eleven_flash_v2_5"  # faster, lower-cost model for the
-                                       # shorter, more matter-of-fact Upcoming
-                                       # preview — roughly half the per-character
-                                       # credit cost of eleven_v3, which matters
-                                       # since both scripts now run every single
-                                       # day through the end of the tournament
+UPCOMING_TTS_MODEL_ID = "eleven_v3"   # NOTE: previously eleven_flash_v2_5 to
+                                       # save credits, but Flash doesn't
+                                       # understand eleven_v3's [bracketed]
+                                       # tags — it just reads them aloud as
+                                       # literal text, plus a real quality
+                                       # drop. Reverted to v3 for both scripts;
+                                       # cost control comes from script length
+                                       # instead (see UPCOMING_STYLE_PROMPT).
 
 # ffmpeg's atempo filter is a SPEED multiplier, not a slowdown percentage.
 # 0.90 means "play at 90% speed" = 10% slower overall. Pitch is preserved.
@@ -183,9 +185,12 @@ def log(message):
 # ELEVENLABS CREDIT MONITORING
 # ---------------------------------------------------------------------------
 # Tuned for the World Cup's remaining run: both scripts together cost roughly
-# 6,000-7,000 characters/day on eleven_v3 + eleven_flash_v2_5. These thresholds
-# give a multi-day heads-up before a hard quota_exceeded failure, rather than
-# finding out the same way we did the first time — a crashed Action mid-run.
+# 6,000 characters/day, both on eleven_v3 (same model for recap and upcoming —
+# Flash was tried briefly for the cheaper Upcoming script but couldn't
+# interpret the [bracketed] emotional tags, so both are back on v3). These
+# thresholds give a multi-day heads-up before a hard quota_exceeded failure,
+# rather than finding out the same way we did the first time — a crashed
+# Action mid-run.
 LOW_CREDIT_DAYS_THRESHOLD = 5     # warn (but still run normally) below this many
                                    # projected days of runway at current usage
 CRITICAL_CREDIT_BUFFER = 500      # if remaining credits are under
@@ -407,6 +412,7 @@ def _parse_fixtures(fixtures, api_key):
         away_score = fx["goals"]["away"]
         venue = fx["fixture"]["venue"].get("name") or "the stadium"
         fixture_id = fx["fixture"]["id"]
+        round_name = fx.get("league", {}).get("round", "")
 
         is_final = status_short in ("FT", "AET", "PEN")
 
@@ -423,6 +429,7 @@ def _parse_fixtures(fixtures, api_key):
             "venue": venue,
             "status": "final" if is_final else "in_progress",
             "scorers": scorers,
+            "round": round_name,
         })
 
     return matches
@@ -528,6 +535,96 @@ def build_standings_context(matches, standings):
         "tournament, waiting = group stage not finished yet, status not "
         "yet determined):\n" + "\n".join(lines)
     )
+
+
+def find_final_match(matches):
+    """If the World Cup Final is among these (finished) matches, return it.
+    Otherwise return None. This is the single trigger for the tournament's
+    one-time closing episode and the permanent stop of daily updates after."""
+    for m in matches:
+        if m.get("round") == "Final" and m.get("status") == "final":
+            return m
+    return None
+
+
+FINALE_STYLE_PROMPT = """You are writing the final-ever script for "Mindful Joga" —
+a mindful, ASMR-toned daily audio recap of World Cup football. This is a
+one-time closing episode, published the morning after the World Cup Final.
+There will be no more daily episodes after this one until the next World Cup.
+
+Follow the same calm, ASMR house style as the daily recaps — soft pacing,
+gentle pauses, [bracketed] emotional/delivery tags supported by the eleven_v3
+voice model (e.g. [warmly], [softly], a literal "..." for a pause) — but this
+episode should feel like a genuine send-off, not just another day's recap.
+
+CONTENT, in this order:
+1. Open warmly, acknowledging this is the last episode of the tournament.
+2. Recap the Final itself: the score, the champion, a couple of standout
+   moments or goal-scorers if provided. Let this breathe — it's the biggest
+   match of the tournament, give it a touch more weight than an ordinary recap.
+3. A short, genuine reflection on the tournament as a whole — its spirit, the
+   shared ritual of these morning check-ins, gratitude to the listener for
+   spending these quiet mornings together.
+4. Close with a warm, specific send-off: thank the listener, and tell them
+   you'll see them in Uruguay in 2030, when the next World Cup kicks off.
+   Keep this line sincere, not corny — it should feel like saying goodbye to
+   a friend after a shared season, not a marketing tagline.
+
+LENGTH: Aim for roughly 450-650 words — a little more spacious than a typical
+recap, since this is a one-time send-off, not a routine update.
+
+Output ONLY the finished script. No headers, no notes — just the words to be
+spoken, with [tags] and ... inline as described above."""
+
+
+def generate_finale_script(final_match, api_key, days_ago=1):
+    """Generate the one-time closing episode for the morning after the
+    World Cup Final."""
+    recency = describe_recency(days_ago)
+    home, away = final_match["home"], final_match["away"]
+    home_score, away_score = final_match["home_score"], final_match["away_score"]
+    champion = home if home_score > away_score else away
+    runner_up = away if home_score > away_score else home
+
+    scorer_lines = ""
+    scorers = final_match.get("scorers", [])
+    if scorers:
+        scorer_strs = []
+        for s in scorers:
+            detail_note = f", {s['detail']}" if s.get("detail") and s["detail"] != "Normal Goal" else ""
+            scorer_strs.append(f"{s['player']} ({s['team']}, {s['minute']}'{detail_note})")
+        scorer_lines = f"\nGoals: {'; '.join(scorer_strs)}"
+
+    today_str = datetime.now(EASTERN).strftime("%B %-d, %Y")
+    user_prompt = (
+        f"Today's date is {today_str}.\n\n"
+        f"The World Cup Final was played {recency}, at {final_match['venue']}:\n"
+        f"{home} {home_score} - {away_score} {away}{scorer_lines}\n\n"
+        f"{champion} are the 2026 World Cup champions. {runner_up} were the runners-up.\n\n"
+        f"Write the final, closing Mindful Joga episode."
+    )
+
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 1500,
+        "system": FINALE_STYLE_PROMPT,
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+
+    log("Generating FINALE script via Claude...")
+    response = requests.post(ANTHROPIC_API_URL, headers=headers, json=payload)
+    if response.status_code != 200:
+        raise RuntimeError(f"Anthropic API error {response.status_code}: {response.text}")
+
+    data = response.json()
+    script_text = "".join(block["text"] for block in data["content"] if block["type"] == "text")
+    log(f"Finale script generated ({len(script_text)} characters).")
+    return script_text.strip()
 
 
 
@@ -791,6 +888,37 @@ def main():
     if missing:
         sys.exit(f"Missing required environment variable(s): {', '.join(missing)}")
 
+    # ---------------------- TOURNAMENT-OVER CHECK ----------------------
+    # FINALE_MARKER_PATH is committed to the repo the day the finale episode
+    # is published. Every run after that checks for it first and does
+    # nothing — no API calls, no audio, no cost — until the scheduler
+    # (cron-job.org) is turned off by hand. The very first run after the
+    # marker exists fails once (visible via the same GitHub email used for
+    # low credits) as a one-time nudge to go disable the cron job; every run
+    # after that is a fully silent no-op.
+    FINALE_MARKER_PATH = "scripts/.finale-published"
+    FINALE_REMINDER_SENT_PATH = "scripts/.finale-reminder-sent"
+
+    if os.path.exists(FINALE_MARKER_PATH):
+        if not os.path.exists(FINALE_REMINDER_SENT_PATH):
+            os.makedirs("scripts", exist_ok=True)
+            with open(FINALE_REMINDER_SENT_PATH, "w") as f:
+                f.write("Reminder sent.\n")
+            log("The World Cup finale episode was already published. "
+                "Mindful Joga's daily run is now permanently retired until "
+                "the 2030 World Cup. This is a one-time reminder to disable "
+                "the cron-job.org scheduler — after this, every future run "
+                "will be a silent no-op.")
+            sys.exit(
+                "Mindful Joga has already published its tournament finale "
+                "episode. No further daily episodes will be generated. "
+                "Please disable the cron-job.org trigger — this is the only "
+                "reminder you'll get; future runs will exit silently."
+            )
+        else:
+            # Reminder already sent on a previous run — true silent no-op.
+            return
+
     # ---------------------- CREDIT CHECK ----------------------
     # Checked once up front so both the recap and upcoming sections below can
     # make an informed decision, rather than discovering the problem mid-run
@@ -801,7 +929,8 @@ def main():
     # actual cost depends on the day's script length, this is a planning
     # estimate, not an exact figure.
     ESTIMATED_RECAP_COST = 3800       # eleven_v3, ~500-700 word script
-    ESTIMATED_UPCOMING_COST = 1500    # eleven_flash_v2_5, shorter + cheaper model
+    ESTIMATED_UPCOMING_COST = 2200    # eleven_v3, ~300-450 word script (shorter
+                                       # than recap, same per-character model cost)
     estimated_daily_cost = ESTIMATED_RECAP_COST + ESTIMATED_UPCOMING_COST
 
     credit_tier = "healthy"  # healthy | low | critical
@@ -839,63 +968,114 @@ def main():
     save_scores_json(matches)
 
     recap_audio_failed = False
+    is_tournament_finale = False
     if not matches:
         # Only true if there were truly zero matches across the entire
         # lookback window — should be rare even in knockouts, since the
         # window is generous. Genuinely nothing honest to recap yet.
         log(f"No matches found in the last {RECAP_LOOKBACK_DAYS} day(s) — skipping recap script/audio generation.")
     else:
-        log(f"Recapping matches from {days_ago} day(s) ago.")
-        script_text = generate_script(matches, anthropic_key, api_football_key, days_ago)
+        final_match = find_final_match(matches)
 
-        # Save the script alongside the audio for reference/debugging in the repo
-        script_path = "scripts/latest-script.txt"
-        os.makedirs("scripts", exist_ok=True)
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script_text)
-        log(f"Recap script also saved to {script_path} for reference.")
+        if final_match:
+            is_tournament_finale = True
+            log(f"🏆 World Cup Final detected: {final_match['home']} "
+                f"{final_match['home_score']}-{final_match['away_score']} "
+                f"{final_match['away']}. Generating the one-time closing episode.")
+            script_text = generate_finale_script(final_match, anthropic_key, days_ago)
 
-        try:
-            generate_audio(script_text, elevenlabs_key, "audio/today-male.mp3", TTS_MODEL_ID)
-        except RuntimeError as e:
-            # Even in the critical-credit case, attempt this — if it still
-            # fails (e.g. credits ran out between the check and now), don't
-            # let it take down the upcoming section or the JSON files we've
-            # already written below. Surface it clearly and keep going.
-            recap_audio_failed = True
-            log(f"⚠️ Recap audio generation failed: {e}")
+            script_path = "scripts/latest-script.txt"
+            os.makedirs("scripts", exist_ok=True)
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(script_text)
+            log(f"Finale script also saved to {script_path} for reference.")
+
+            try:
+                generate_audio(script_text, elevenlabs_key, "audio/today-male.mp3", TTS_MODEL_ID)
+            except RuntimeError as e:
+                recap_audio_failed = True
+                log(f"⚠️ Finale audio generation failed: {e}")
+
+            # Write the marker now, regardless of audio success/failure above —
+            # the Final has been played and recapped (text script exists either
+            # way); we don't want to re-trigger this branch tomorrow and
+            # generate a second, possibly conflicting "finale" episode.
+            with open(FINALE_MARKER_PATH, "w") as f:
+                f.write(f"Finale published. Champion match: {final_match['home']} "
+                        f"{final_match['home_score']}-{final_match['away_score']} "
+                        f"{final_match['away']}.\n")
+            log(f"Wrote {FINALE_MARKER_PATH} — daily updates will stop after today.")
+        else:
+            log(f"Recapping matches from {days_ago} day(s) ago.")
+            script_text = generate_script(matches, anthropic_key, api_football_key, days_ago)
+
+            # Save the script alongside the audio for reference/debugging in the repo
+            script_path = "scripts/latest-script.txt"
+            os.makedirs("scripts", exist_ok=True)
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(script_text)
+            log(f"Recap script also saved to {script_path} for reference.")
+
+            try:
+                generate_audio(script_text, elevenlabs_key, "audio/today-male.mp3", TTS_MODEL_ID)
+            except RuntimeError as e:
+                # Even in the critical-credit case, attempt this — if it still
+                # fails (e.g. credits ran out between the check and now), don't
+                # let it take down the upcoming section or the JSON files we've
+                # already written below. Surface it clearly and keep going.
+                recap_audio_failed = True
+                log(f"⚠️ Recap audio generation failed: {e}")
 
     # ---------------------- UPCOMING ----------------------
-    upcoming_matches, matchday_date = fetch_upcoming_matches(api_football_key)
-
-    # Always write upcoming.json, even if empty, so the site never shows stale data
-    save_upcoming_json(upcoming_matches, matchday_date)
-
     upcoming_audio_skipped_for_credits = False
-    if not upcoming_matches:
-        log("No upcoming matches found — skipping upcoming script/audio generation.")
-    elif credit_tier == "critical":
-        # Prioritize the recap (the part people actually wait for) over the
-        # forward-looking preview when credits are this tight. The countdown
-        # angle picks back up automatically once credits reset or the plan
-        # is upgraded — nothing is lost, just deferred a day.
-        upcoming_audio_skipped_for_credits = True
-        log("Skipping Upcoming script/audio today — reserving remaining "
-            "credits for the recap due to critically low balance.")
+    if is_tournament_finale:
+        # Nothing left to preview — the tournament just ended. Write an
+        # empty upcoming.json so the site doesn't show stale fixtures, and
+        # skip script/audio generation entirely.
+        save_upcoming_json([], None)
+        log("Tournament finale published — skipping Upcoming section entirely (nothing left to preview until 2030).")
     else:
-        upcoming_script_text = generate_upcoming_script(upcoming_matches, matchday_date, anthropic_key)
+        upcoming_matches, matchday_date = fetch_upcoming_matches(api_football_key)
 
-        upcoming_script_path = "scripts/latest-upcoming-script.txt"
-        with open(upcoming_script_path, "w", encoding="utf-8") as f:
-            f.write(upcoming_script_text)
-        log(f"Upcoming script also saved to {upcoming_script_path} for reference.")
+        # Always write upcoming.json, even if empty, so the site never shows stale data
+        save_upcoming_json(upcoming_matches, matchday_date)
 
-        try:
-            generate_audio(upcoming_script_text, elevenlabs_key, "audio/today-upcoming.mp3", UPCOMING_TTS_MODEL_ID)
-        except RuntimeError as e:
-            log(f"⚠️ Upcoming audio generation failed: {e}")
+        if not upcoming_matches:
+            log("No upcoming matches found — skipping upcoming script/audio generation.")
+        elif credit_tier == "critical":
+            # Prioritize the recap (the part people actually wait for) over the
+            # forward-looking preview when credits are this tight. The countdown
+            # angle picks back up automatically once credits reset or the plan
+            # is upgraded — nothing is lost, just deferred a day.
+            upcoming_audio_skipped_for_credits = True
+            log("Skipping Upcoming script/audio today — reserving remaining "
+                "credits for the recap due to critically low balance.")
+        else:
+            upcoming_script_text = generate_upcoming_script(upcoming_matches, matchday_date, anthropic_key)
+
+            upcoming_script_path = "scripts/latest-upcoming-script.txt"
+            with open(upcoming_script_path, "w", encoding="utf-8") as f:
+                f.write(upcoming_script_text)
+            log(f"Upcoming script also saved to {upcoming_script_path} for reference.")
+
+            try:
+                generate_audio(upcoming_script_text, elevenlabs_key, "audio/today-upcoming.mp3", UPCOMING_TTS_MODEL_ID)
+            except RuntimeError as e:
+                log(f"⚠️ Upcoming audio generation failed: {e}")
 
     log("Done.")
+
+    if is_tournament_finale and not recap_audio_failed:
+        # A clean, expected stop — not an error. Still exits non-zero so the
+        # existing GitHub failure-email fires once, letting you know it's
+        # time to retire the cron-job.org schedule. No further action needed
+        # from the script itself after this.
+        sys.exit(
+            "🏆 The World Cup Final has been recapped — this was the last "
+            "scheduled Mindful Joga episode of the tournament. A marker file "
+            "has been committed so future runs will no-op automatically. "
+            "See you in Uruguay in 2030!"
+        )
 
     # Deliberately fail the Action when credits are critical, so the existing
     # GitHub failure-email notification fires — even though the recap itself
@@ -903,9 +1083,9 @@ def main():
     # from a genuine crash: the commit step below still runs either way.
     if credit_tier == "critical" or recap_audio_failed:
         sys.exit(
-            "ElevenLabs credits are critically low (or recap audio failed) — "
-            "this run is flagged so it reaches you by email, even though "
-            "the recap script/scores were generated normally. Check your "
+            "ElevenLabs credits are critically low (or recap/finale audio "
+            "failed) — this run is flagged so it reaches you by email, even "
+            "though the script/scores were generated normally. Check your "
             "ElevenLabs balance."
         )
 
