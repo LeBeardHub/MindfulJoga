@@ -19,6 +19,7 @@ debug for a small, single-purpose daily job like this one.
 """
 
 import os
+import re
 import sys
 import json
 import subprocess
@@ -540,9 +541,21 @@ def build_standings_context(matches, standings):
 def find_final_match(matches):
     """If the World Cup Final is among these (finished) matches, return it.
     Otherwise return None. This is the single trigger for the tournament's
-    one-time closing episode and the permanent stop of daily updates after."""
+    one-time closing episode and the permanent stop of daily updates after.
+
+    Matched case-insensitively against variations like "Final" or "Final - 1"
+    (API-Football's group-stage rounds are phrased "Group Stage - 3", so the
+    Final may similarly carry a suffix). Uses a word-boundary match on
+    "final" rather than a plain substring check — "Quarter-finals" and
+    "Semi-finals" both contain the substring "final" too, and a naive check
+    would wrongly trigger the tournament-ending logic weeks early. Also
+    explicitly excludes the 3rd-place playoff ("3rd Place Final"), which is
+    played a day or two BEFORE the actual Final."""
     for m in matches:
-        if m.get("round") == "Final" and m.get("status") == "final":
+        round_name = (m.get("round") or "").strip().lower()
+        is_bronze_match = "3rd" in round_name or "third" in round_name
+        is_final = re.search(r"\bfinal\b", round_name) and not is_bronze_match
+        if is_final and m.get("status") == "final":
             return m
     return None
 
