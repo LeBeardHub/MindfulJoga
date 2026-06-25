@@ -254,7 +254,7 @@ def fetch_standings(api_key):
     return classified
 
 
-
+def fetch_goal_scorers(fixture_id, api_key):
     """Fetch the events for one fixture and return a short list of goal
     scorers (and own-goal info), used to add a couple of player names into
     the script — not a full play-by-play."""
