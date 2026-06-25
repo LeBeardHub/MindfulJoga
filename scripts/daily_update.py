@@ -22,6 +22,9 @@ import json
 import subprocess
 import requests
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+EASTERN = ZoneInfo("America/New_York")
 
 # ---------------------------------------------------------------------------
 # CONFIG
@@ -124,6 +127,28 @@ PLAYER NAMES (use sparingly — this is the new part):
   player by name. Do not force a name into every match just because the data
   is there.
 
+QUALIFICATION STATUS (advancing / eliminated / still waiting):
+- When provided, qualification status data tells you whether a team is
+  through to the next round, out of the tournament, or still waiting because
+  their group isn't finished. Weave this in naturally where it fits — after
+  describing a match's result is the most natural spot.
+- "Advancing" gets a warm, simple acknowledgment — "Brazil moves on to the
+  next round" — no extra fanfare needed, the result already carries that.
+- "Eliminated" needs the same gentle care as a losing-team consolation beat,
+  arguably more so, since this is the end of their tournament, not just one
+  bad day. Never say "eliminated," "knocked out," or "out" as a blunt fact
+  and move on. Soften it: "their World Cup ends here, for now" or "they'll
+  be watching the rest of this from home, same as a lot of us." Always pair
+  it with the same warmth you'd give any consolation beat.
+- "Waiting" should be framed as genuinely suspenseful in a calm way, not
+  anxious — "their fate isn't decided yet, and won't be for a couple more
+  days" — this is good material for naming the unresolved feeling without
+  trying to resolve it.
+- Do NOT force this into every match. If the status data isn't provided, or
+  doesn't add something genuinely worth saying, leave it out entirely. This
+  is seasoning, like the player names — most matches don't need it spelled
+  out, especially mid-group-stage when most teams are still just "waiting."
+
 LENGTH: Aim for roughly 500-700 words total (about 3-4 minutes spoken slowly).
 
 Output ONLY the finished script. No headers, no notes, no explanation — just the
@@ -138,7 +163,98 @@ def log(message):
 # STEP 1 — Fetch yesterday's match results
 # ---------------------------------------------------------------------------
 
-def fetch_goal_scorers(fixture_id, api_key):
+def fetch_standings(api_key):
+    """Fetch group-stage standings for all 12 groups and classify each team
+    as advancing, eliminated, or still waiting on other results — using the
+    actual World Cup 2026 format (top 2 of each group, plus the 8 best
+    third-placed teams across all groups, advance to the Round of 32)."""
+    headers = {"x-apisports-key": api_key}
+    params = {"league": WORLD_CUP_LEAGUE_ID, "season": WORLD_CUP_SEASON}
+
+    response = requests.get(f"{API_FOOTBALL_BASE}/standings", headers=headers, params=params)
+    if response.status_code != 200:
+        log(f"Standings fetch error: {response.status_code}")
+        return []
+
+    data = response.json()
+    raw_groups = data.get("response", [{}])[0].get("league", {}).get("standings", [])
+    if not raw_groups:
+        log("No standings data returned (group stage may not have started yet).")
+        return []
+
+    # Each group's rows, with played-match count, to know if the group is
+    # actually finished (all teams played all 3 group matches) before we
+    # treat a 3rd-place finish as final rather than "still waiting."
+    groups = []
+    third_placed = []
+    for group_rows in raw_groups:
+        group_name = group_rows[0]["group"] if group_rows else "Unknown"
+        group_complete = all(row["all"]["played"] >= 3 for row in group_rows)
+        team_rows = []
+        for row in group_rows:
+            team_rows.append({
+                "team": row["team"]["name"],
+                "rank": row["rank"],
+                "points": row["points"],
+                "played": row["all"]["played"],
+                "goal_diff": row["goalsDiff"],
+                "goals_for": row["all"]["goals"]["for"],
+            })
+            if row["rank"] == 3:
+                third_placed.append({
+                    "team": row["team"]["name"],
+                    "group": group_name,
+                    "points": row["points"],
+                    "goal_diff": row["goalsDiff"],
+                    "goals_for": row["all"]["goals"]["for"],
+                    "group_complete": group_complete,
+                })
+        groups.append({"group": group_name, "complete": group_complete, "teams": team_rows})
+
+    # Determine the 8 best 3rd-placed teams, but ONLY once enough groups are
+    # complete to make that ranking meaningful — otherwise every 3rd place
+    # team should show as "waiting," not prematurely eliminated.
+    # IMPORTANT: compare against the real tournament-wide group count (12),
+    # not just len(groups) — a partial API response could otherwise make a
+    # handful of finished groups look like "all groups," which would
+    # incorrectly eliminate 3rd-place teams before the full picture is in.
+    TOTAL_WORLD_CUP_GROUPS = 12
+    complete_groups = [g for g in groups if g["complete"]]
+    all_groups_done = len(complete_groups) >= TOTAL_WORLD_CUP_GROUPS
+
+    best_third_teams = set()
+    if all_groups_done:
+        ranked_thirds = sorted(
+            third_placed,
+            key=lambda t: (t["points"], t["goal_diff"], t["goals_for"]),
+            reverse=True,
+        )
+        best_third_teams = {t["team"] for t in ranked_thirds[:8]}
+
+    classified = []
+    for g in groups:
+        for row in g["teams"]:
+            if not g["complete"]:
+                status = "waiting"  # group still has matches left to play
+            elif row["rank"] in (1, 2):
+                status = "advancing"
+            elif row["rank"] == 3:
+                status = "advancing" if row["team"] in best_third_teams else (
+                    "waiting" if not all_groups_done else "eliminated"
+                )
+            else:
+                status = "eliminated"
+            classified.append({
+                "team": row["team"],
+                "group": g["group"],
+                "rank": row["rank"],
+                "status": status,
+            })
+
+    return classified
+
+
+
     """Fetch the events for one fixture and return a short list of goal
     scorers (and own-goal info), used to add a couple of player names into
     the script — not a full play-by-play."""
@@ -171,14 +287,19 @@ def fetch_goal_scorers(fixture_id, api_key):
 
 
 def fetch_yesterdays_matches(api_key):
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
-    log(f"Fetching matches for {yesterday}...")
+    # Compute "yesterday" using Eastern time directly (not UTC-minus-a-day),
+    # since the script can run early enough in ET that a naive UTC offset
+    # would land on the wrong calendar day.
+    now_et = datetime.now(EASTERN)
+    yesterday = (now_et - timedelta(days=1)).strftime("%Y-%m-%d")
+    log(f"Fetching matches for {yesterday} (America/New_York)...")
 
     headers = {"x-apisports-key": api_key}
     params = {
         "league": WORLD_CUP_LEAGUE_ID,
         "season": WORLD_CUP_SEASON,
         "date": yesterday,
+        "timezone": "America/New_York",
     }
 
     response = requests.get(f"{API_FOOTBALL_BASE}/fixtures", headers=headers, params=params)
@@ -254,12 +375,48 @@ def build_match_summary(matches):
     return "\n".join(lines)
 
 
-def generate_script(matches, api_key):
+def build_standings_context(matches, standings):
+    """Build a short qualification-status note for just the teams that
+    played in yesterday's matches, so Claude can mention it naturally
+    without dumping all 48 teams' statuses into the script."""
+    if not standings:
+        return ""
+
+    teams_in_play = set()
+    for m in matches:
+        teams_in_play.add(m["home"])
+        teams_in_play.add(m["away"])
+
+    status_by_team = {row["team"]: row["status"] for row in standings}
+
+    lines = []
+    for team in teams_in_play:
+        status = status_by_team.get(team)
+        if status:
+            lines.append(f"- {team}: {status}")
+
+    if not lines:
+        return ""
+
+    return (
+        "\n\nQualification status for teams in yesterday's matches "
+        "(advancing = through to the next round, eliminated = out of the "
+        "tournament, waiting = group stage not finished yet, status not "
+        "yet determined):\n" + "\n".join(lines)
+    )
+
+
+
+
+def generate_script(matches, api_key, api_football_key):
     match_summary = build_match_summary(matches)
-    today_str = datetime.now(timezone.utc).strftime("%B %-d, %Y")  # e.g. "June 22, 2026"
+    standings = fetch_standings(api_football_key)
+    standings_context = build_standings_context(matches, standings)
+    today_str = datetime.now(EASTERN).strftime("%B %-d, %Y")  # e.g. "June 22, 2026"
     user_prompt = (
         f"Today's date is {today_str}.\n\n"
-        f"Here are yesterday's World Cup matches:\n\n{match_summary}\n\n"
+        f"Here are yesterday's World Cup matches:\n\n{match_summary}"
+        f"{standings_context}\n\n"
         f"Write today's Mindful Joga script."
     )
 
@@ -361,13 +518,15 @@ def fetch_upcoming_matches(api_key, days_ahead=5):
     otherwise the closest future date with scheduled fixtures within
     `days_ahead` days. Returns (matches, matchday_date) or ([], None)."""
     headers = {"x-apisports-key": api_key}
+    now_et = datetime.now(EASTERN)
 
     for offset in range(0, days_ahead + 1):
-        check_date = (datetime.now(timezone.utc) + timedelta(days=offset)).strftime("%Y-%m-%d")
+        check_date = (now_et + timedelta(days=offset)).strftime("%Y-%m-%d")
         params = {
             "league": WORLD_CUP_LEAGUE_ID,
             "season": WORLD_CUP_SEASON,
             "date": check_date,
+            "timezone": "America/New_York",
         }
         response = requests.get(f"{API_FOOTBALL_BASE}/fixtures", headers=headers, params=params)
         if response.status_code != 200:
@@ -444,7 +603,7 @@ spoken, with [tags] and ... inline as described above."""
 
 def generate_upcoming_script(matches, matchday_date, api_key):
     summary = build_upcoming_summary(matches, matchday_date)
-    today_str = datetime.now(timezone.utc).strftime("%B %-d, %Y")
+    today_str = datetime.now(EASTERN).strftime("%B %-d, %Y")
     user_prompt = (
         f"Today's date is {today_str}.\n\n"
         f"Here is the nearest upcoming World Cup matchday:\n\n{summary}\n\n"
@@ -514,7 +673,7 @@ def main():
     if not matches:
         log("No matches found for yesterday — skipping recap script/audio generation.")
     else:
-        script_text = generate_script(matches, anthropic_key)
+        script_text = generate_script(matches, anthropic_key, api_football_key)
 
         # Save the script alongside the audio for reference/debugging in the repo
         script_path = "scripts/latest-script.txt"
