@@ -3,7 +3,9 @@ Mindful Joga — Daily Automation
 ---------------------------------
 Runs once a day (via GitHub Actions). Does four things in order:
 
-  1. Fetch yesterday's World Cup match results from API-Football
+  1. Fetch the most recent World Cup match results from API-Football (looks
+     back a few days if needed, so knockout-stage rest days still have a
+     real result to recap)
   2. Turn those results into a calm script using Claude (house style baked in)
   3. Turn that script into audio using ElevenLabs (Ryan's voice)
   4. Save the audio file into audio/today-male.mp3, overwriting the old one
@@ -54,8 +56,13 @@ VOICE_SETTINGS = {
 
 HOUSE_STYLE_PROMPT = """You are writing the daily script for "Mindful Joga" — \
 a mindful, ASMR-toned daily MORNING audio recap of World Cup football. It drops once \
-each morning and recaps the matches that finished the prior day, so the listener can \
-start their day caught up, calmly. Follow these rules exactly:
+each morning so the listener can start their day caught up, calmly. During the group \
+stage this almost always means the matches that finished the prior day — but during \
+knockout rounds, with single-game days and multi-day gaps between rounds, it may \
+instead be recapping the most recent result from a few days back. The user message \
+will always tell you exactly how recent the matches are — follow that note precisely \
+for how you talk about timing, rather than assuming "yesterday." Follow these rules \
+exactly:
 
 VOICE & TONE:
 - Open with "Good morning. Welcome to [today's date], Mindful Joga's World Cup
@@ -64,6 +71,12 @@ VOICE & TONE:
   the numeric format, say it the way a person would say it out loud). This is
   specifically a morning ritual, and the listener should know exactly where
   they are within the first few seconds.
+- If the recency note says the matches are NOT from yesterday (a knockout-stage
+  rest day with nothing new), gently acknowledge the quiet stretch instead of
+  implying these are fresh results — something like "[softly] it's been a
+  quiet couple of days in the tournament... so let's sit with the last result
+  a little longer." This keeps the script honest without making the lack of
+  new matches feel like a problem to apologize for.
 - Warm, slow, unhurried — slower than feels natural at first. Short sentences. Generous room to breathe between thoughts, not just between sections.
 - Address the listener directly as "you" at least 3-4 times in the script.
 - Never use score-anxiety language (no "DESTROYED," "STUNNING," "SMASHED," etc.)
@@ -160,7 +173,7 @@ def log(message):
 
 
 # ---------------------------------------------------------------------------
-# STEP 1 — Fetch yesterday's match results
+# STEP 1 — Fetch the most recent match results
 # ---------------------------------------------------------------------------
 
 def fetch_standings(api_key):
@@ -286,19 +299,20 @@ def fetch_goal_scorers(fixture_id, api_key):
     return scorers
 
 
-def fetch_yesterdays_matches(api_key):
-    # Compute "yesterday" using Eastern time directly (not UTC-minus-a-day),
-    # since the script can run early enough in ET that a naive UTC offset
-    # would land on the wrong calendar day.
-    now_et = datetime.now(EASTERN)
-    yesterday = (now_et - timedelta(days=1)).strftime("%Y-%m-%d")
-    log(f"Fetching matches for {yesterday} (America/New_York)...")
+RECAP_LOOKBACK_DAYS = 4  # how many days back to search for the most recent
+                         # date with any match, so knockout-stage rest days
+                         # (no game yesterday, or even for several days) don't
+                         # leave the recap with nothing to talk about
 
+
+def _fetch_fixtures_for_date(date_str, api_key):
+    """Fetch raw fixtures for a single date. Returns the list of fixture
+    dicts from API-Football (empty list on a clean no-fixtures response)."""
     headers = {"x-apisports-key": api_key}
     params = {
         "league": WORLD_CUP_LEAGUE_ID,
         "season": WORLD_CUP_SEASON,
-        "date": yesterday,
+        "date": date_str,
         "timezone": "America/New_York",
     }
 
@@ -311,15 +325,17 @@ def fetch_yesterdays_matches(api_key):
 
     data = response.json()
 
-    # Debug: show any API-level errors/warnings and the raw result count
     if data.get("errors"):
         log(f"API-Football reported errors: {data['errors']}")
     log(f"API-Football 'results' count: {data.get('results')}")
     log(f"Raw response (first 1500 chars): {str(data)[:1500]}")
 
-    fixtures = data.get("response", [])
-    log(f"Found {len(fixtures)} fixture(s).")
+    return data.get("response", [])
 
+
+def _parse_fixtures(fixtures, api_key):
+    """Turn raw API-Football fixture dicts into our simplified match dicts,
+    attaching goal scorers for any finished match."""
     matches = []
     for fx in fixtures:
         status_short = fx["fixture"]["status"]["short"]
@@ -337,7 +353,6 @@ def fetch_yesterdays_matches(api_key):
             scorers = fetch_goal_scorers(fixture_id, api_key)
             log(f"  Fixture {fixture_id} ({home} v {away}): {len(scorers)} goal event(s) found.")
 
-
         matches.append({
             "home": home,
             "away": away,
@@ -351,14 +366,61 @@ def fetch_yesterdays_matches(api_key):
     return matches
 
 
+def fetch_recent_matches(api_key, lookback_days=RECAP_LOOKBACK_DAYS):
+    """Find the most recent date (starting from yesterday and scanning
+    backward up to `lookback_days`) that had any matches, and return that
+    date's matches along with how many days ago it was.
+
+    During the group stage this almost always resolves on the very first
+    check (yesterday). During knockout rounds, with single-game days and
+    multi-day gaps between rounds, this walks back far enough to find the
+    last real result so the recap always has something true to say —
+    instead of going silent the moment "yesterday" happens to be empty.
+
+    Returns (matches, days_ago). If nothing is found in the whole window,
+    returns ([], None).
+    """
+    now_et = datetime.now(EASTERN)
+
+    for days_ago in range(1, lookback_days + 1):
+        check_date = (now_et - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+        log(f"Checking for matches on {check_date} (days_ago={days_ago}, America/New_York)...")
+
+        fixtures = _fetch_fixtures_for_date(check_date, api_key)
+        log(f"Found {len(fixtures)} fixture(s) on {check_date}.")
+
+        if fixtures:
+            matches = _parse_fixtures(fixtures, api_key)
+            return matches, days_ago
+
+    log(f"No matches found in the last {lookback_days} day(s).")
+    return [], None
+
+
 # ---------------------------------------------------------------------------
 # STEP 2 — Write the script via Claude
 # ---------------------------------------------------------------------------
 
-def build_match_summary(matches):
+def describe_recency(days_ago):
+    """Turn a days_ago count into a natural phrase for the script prompt,
+    so Claude's house style can phrase timing honestly instead of always
+    saying 'yesterday' even when results are a few days old."""
+    if days_ago is None:
+        return "in the near future"  # not used in practice; matches is empty
+    if days_ago == 1:
+        return "yesterday"
+    if days_ago == 2:
+        return "two days ago"
+    if days_ago == 3:
+        return "a few days ago"
+    return f"{days_ago} days ago"
+
+
+def build_match_summary(matches, days_ago=1):
     if not matches:
-        return "No World Cup matches were played yesterday."
-    lines = []
+        return "No World Cup matches were played recently."
+    recency = describe_recency(days_ago)
+    lines = [f"(These matches were played {recency}.)"]
     for m in matches:
         if m["status"] == "final":
             line = f"- {m['home']} {m['home_score']} - {m['away_score']} {m['away']} (venue: {m['venue']})"
@@ -376,9 +438,9 @@ def build_match_summary(matches):
 
 
 def build_standings_context(matches, standings):
-    """Build a short qualification-status note for just the teams that
-    played in yesterday's matches, so Claude can mention it naturally
-    without dumping all 48 teams' statuses into the script."""
+    """Build a short qualification-status note for just the teams in the
+    matches being recapped, so Claude can mention it naturally without
+    dumping all 48 teams' statuses into the script."""
     if not standings:
         return ""
 
@@ -399,7 +461,7 @@ def build_standings_context(matches, standings):
         return ""
 
     return (
-        "\n\nQualification status for teams in yesterday's matches "
+        "\n\nQualification status for teams in these matches "
         "(advancing = through to the next round, eliminated = out of the "
         "tournament, waiting = group stage not finished yet, status not "
         "yet determined):\n" + "\n".join(lines)
@@ -408,14 +470,18 @@ def build_standings_context(matches, standings):
 
 
 
-def generate_script(matches, api_key, api_football_key):
-    match_summary = build_match_summary(matches)
+def generate_script(matches, api_key, api_football_key, days_ago=1):
+    match_summary = build_match_summary(matches, days_ago)
     standings = fetch_standings(api_football_key)
     standings_context = build_standings_context(matches, standings)
     today_str = datetime.now(EASTERN).strftime("%B %-d, %Y")  # e.g. "June 22, 2026"
+    recency = describe_recency(days_ago)
     user_prompt = (
         f"Today's date is {today_str}.\n\n"
-        f"Here are yesterday's World Cup matches:\n\n{match_summary}"
+        f"Here are the most recent World Cup matches, played {recency} "
+        f"(NOT necessarily yesterday — check the recency note below and "
+        f"phrase the script's timing language honestly, e.g. if it's been "
+        f"a few days, don't say 'yesterday'):\n\n{match_summary}"
         f"{standings_context}\n\n"
         f"Write today's Mindful Joga script."
     )
@@ -663,17 +729,26 @@ def main():
     if missing:
         sys.exit(f"Missing required environment variable(s): {', '.join(missing)}")
 
-    # ---------------------- RECAP (existing, unchanged) ----------------------
-    matches = fetch_yesterdays_matches(api_football_key)
+    # ---------------------- RECAP ----------------------
+    # Looks back up to RECAP_LOOKBACK_DAYS to find the most recent date with
+    # any matches. This keeps daily audio flowing through knockout-stage rest
+    # days (single-game days, multi-day gaps between rounds) by re-narrating
+    # the last real result with honest "how long ago" phrasing, rather than
+    # going silent the moment "yesterday" happens to be empty.
+    matches, days_ago = fetch_recent_matches(api_football_key)
 
     # Always write the scores file, even if empty, so the live site never
-    # shows yesterday's (or older) stale placeholder data.
+    # shows stale placeholder data.
     save_scores_json(matches)
 
     if not matches:
-        log("No matches found for yesterday — skipping recap script/audio generation.")
+        # Only true if there were truly zero matches across the entire
+        # lookback window — should be rare even in knockouts, since the
+        # window is generous. Genuinely nothing honest to recap yet.
+        log(f"No matches found in the last {RECAP_LOOKBACK_DAYS} day(s) — skipping recap script/audio generation.")
     else:
-        script_text = generate_script(matches, anthropic_key, api_football_key)
+        log(f"Recapping matches from {days_ago} day(s) ago.")
+        script_text = generate_script(matches, anthropic_key, api_football_key, days_ago)
 
         # Save the script alongside the audio for reference/debugging in the repo
         script_path = "scripts/latest-script.txt"
