@@ -1,25 +1,25 @@
 {
-  "matchday": "2026-06-24",
+  "matchday": "2026-06-25",
   "matches": [
     {
-      "home": "Switzerland",
-      "away": "Canada",
-      "kickoff_utc": "2026-06-24T19:00:00+00:00"
+      "home": "Ecuador",
+      "away": "Germany",
+      "kickoff_utc": "2026-06-25T20:00:00+00:00"
     },
     {
-      "home": "Bosnia & Herzegovina",
-      "away": "Qatar",
-      "kickoff_utc": "2026-06-24T19:00:00+00:00"
+      "home": "Cura\u00e7ao",
+      "away": "Ivory Coast",
+      "kickoff_utc": "2026-06-25T20:00:00+00:00"
     },
     {
-      "home": "Morocco",
-      "away": "Haiti",
-      "kickoff_utc": "2026-06-24T22:00:00+00:00"
+      "home": "Japan",
+      "away": "Sweden",
+      "kickoff_utc": "2026-06-25T23:00:00+00:00"
     },
     {
-      "home": "Scotland",
-      "away": "Brazil",
-      "kickoff_utc": "2026-06-24T22:00:00+00:00"
+      "home": "Tunisia",
+      "away": "Netherlands",
+      "kickoff_utc": "2026-06-25T23:00:00+00:00"
     }
   ]
 }
