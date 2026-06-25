@@ -40,7 +40,14 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 
 VOICE_ID = "jbEI5QkrMSKWeDlP27MV"  # Ryan — Deep and Meditative
-TTS_MODEL_ID = "eleven_v3"
+TTS_MODEL_ID = "eleven_v3"            # premium expressive model — used for the
+                                       # main recap, where [tags]/pacing matter most
+UPCOMING_TTS_MODEL_ID = "eleven_flash_v2_5"  # faster, lower-cost model for the
+                                       # shorter, more matter-of-fact Upcoming
+                                       # preview — roughly half the per-character
+                                       # credit cost of eleven_v3, which matters
+                                       # since both scripts now run every single
+                                       # day through the end of the tournament
 
 # ffmpeg's atempo filter is a SPEED multiplier, not a slowdown percentage.
 # 0.90 means "play at 90% speed" = 10% slower overall. Pitch is preserved.
@@ -170,6 +177,61 @@ words to be spoken, with [tags] and ... inline as described above."""
 
 def log(message):
     print(f"[mindful-joga] {message}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# ELEVENLABS CREDIT MONITORING
+# ---------------------------------------------------------------------------
+# Tuned for the World Cup's remaining run: both scripts together cost roughly
+# 6,000-7,000 characters/day on eleven_v3 + eleven_flash_v2_5. These thresholds
+# give a multi-day heads-up before a hard quota_exceeded failure, rather than
+# finding out the same way we did the first time — a crashed Action mid-run.
+LOW_CREDIT_DAYS_THRESHOLD = 5     # warn (but still run normally) below this many
+                                   # projected days of runway at current usage
+CRITICAL_CREDIT_BUFFER = 500      # if remaining credits are under
+                                   # (today's estimated need + this buffer),
+                                   # treat it as critical for today's run
+
+
+def fetch_elevenlabs_credit_status(api_key):
+    """Check remaining ElevenLabs credits and estimate days of runway at the
+    recent daily average. Returns a dict, or None if the check itself fails
+    (in which case the caller should proceed normally rather than block the
+    whole run over a monitoring hiccup)."""
+    try:
+        response = requests.get(
+            "https://api.elevenlabs.io/v1/user/subscription",
+            headers={"xi-api-key": api_key},
+        )
+        if response.status_code != 200:
+            log(f"Could not check ElevenLabs subscription status: {response.status_code}")
+            return None
+
+        data = response.json()
+        used = data.get("character_count", 0)
+        limit = data.get("character_limit", 0)
+        remaining = limit - used
+        reset_unix = data.get("next_character_count_reset_unix")
+
+        days_until_reset = None
+        if reset_unix:
+            seconds_left = reset_unix - datetime.now(timezone.utc).timestamp()
+            days_until_reset = max(seconds_left / 86400, 0)
+
+        log(f"ElevenLabs credits: {remaining:,} remaining of {limit:,} "
+            f"({used:,} used). Resets in "
+            f"{days_until_reset:.1f} day(s)." if days_until_reset is not None
+            else f"ElevenLabs credits: {remaining:,} remaining of {limit:,} ({used:,} used).")
+
+        return {
+            "remaining": remaining,
+            "limit": limit,
+            "days_until_reset": days_until_reset,
+        }
+    except Exception as e:
+        # Monitoring should never be the reason the whole run fails.
+        log(f"ElevenLabs credit check failed (non-fatal): {e}")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -513,7 +575,7 @@ def generate_script(matches, api_key, api_football_key, days_ago=1):
 # STEP 3 — Turn the script into audio via ElevenLabs
 # ---------------------------------------------------------------------------
 
-def generate_audio(script_text, api_key, output_path):
+def generate_audio(script_text, api_key, output_path, model_id=TTS_MODEL_ID):
     url = f"{ELEVENLABS_API_URL}/{VOICE_ID}"
     headers = {
         "xi-api-key": api_key,
@@ -522,11 +584,11 @@ def generate_audio(script_text, api_key, output_path):
     }
     payload = {
         "text": script_text,
-        "model_id": TTS_MODEL_ID,
+        "model_id": model_id,
         "voice_settings": VOICE_SETTINGS,
     }
 
-    log("Generating audio via ElevenLabs...")
+    log(f"Generating audio via ElevenLabs (model: {model_id})...")
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200:
         raise RuntimeError(f"ElevenLabs API error {response.status_code}: {response.text}")
@@ -729,6 +791,41 @@ def main():
     if missing:
         sys.exit(f"Missing required environment variable(s): {', '.join(missing)}")
 
+    # ---------------------- CREDIT CHECK ----------------------
+    # Checked once up front so both the recap and upcoming sections below can
+    # make an informed decision, rather than discovering the problem mid-run
+    # (as happened the first time, with an uncaught quota_exceeded crash).
+    credit_status = fetch_elevenlabs_credit_status(elevenlabs_key)
+
+    # Rough per-script cost estimate, used only for the runway projection —
+    # actual cost depends on the day's script length, this is a planning
+    # estimate, not an exact figure.
+    ESTIMATED_RECAP_COST = 3800       # eleven_v3, ~500-700 word script
+    ESTIMATED_UPCOMING_COST = 1500    # eleven_flash_v2_5, shorter + cheaper model
+    estimated_daily_cost = ESTIMATED_RECAP_COST + ESTIMATED_UPCOMING_COST
+
+    credit_tier = "healthy"  # healthy | low | critical
+    if credit_status:
+        remaining = credit_status["remaining"]
+        projected_days = remaining / estimated_daily_cost if estimated_daily_cost else float("inf")
+
+        if remaining < ESTIMATED_RECAP_COST + CRITICAL_CREDIT_BUFFER:
+            credit_tier = "critical"
+            log(f"⚠️ CRITICAL: only {remaining:,} ElevenLabs credits left — "
+                f"not enough headroom for today's recap. Will attempt recap "
+                f"only and skip the Upcoming script.")
+        elif projected_days < LOW_CREDIT_DAYS_THRESHOLD:
+            credit_tier = "low"
+            log(f"⚠️ LOW CREDITS: {remaining:,} remaining, projected to last "
+                f"~{projected_days:.1f} more day(s) at current usage. "
+                f"Running normally today, but consider upgrading soon — "
+                f"this is a heads-up, not a failure.")
+        else:
+            log(f"Credits healthy: {remaining:,} remaining, "
+                f"~{projected_days:.1f} projected day(s) of runway.")
+    else:
+        log("Proceeding without a credit-status check (monitoring call failed).")
+
     # ---------------------- RECAP ----------------------
     # Looks back up to RECAP_LOOKBACK_DAYS to find the most recent date with
     # any matches. This keeps daily audio flowing through knockout-stage rest
@@ -741,6 +838,7 @@ def main():
     # shows stale placeholder data.
     save_scores_json(matches)
 
+    recap_audio_failed = False
     if not matches:
         # Only true if there were truly zero matches across the entire
         # lookback window — should be rare even in knockouts, since the
@@ -757,16 +855,33 @@ def main():
             f.write(script_text)
         log(f"Recap script also saved to {script_path} for reference.")
 
-        generate_audio(script_text, elevenlabs_key, "audio/today-male.mp3")
+        try:
+            generate_audio(script_text, elevenlabs_key, "audio/today-male.mp3", TTS_MODEL_ID)
+        except RuntimeError as e:
+            # Even in the critical-credit case, attempt this — if it still
+            # fails (e.g. credits ran out between the check and now), don't
+            # let it take down the upcoming section or the JSON files we've
+            # already written below. Surface it clearly and keep going.
+            recap_audio_failed = True
+            log(f"⚠️ Recap audio generation failed: {e}")
 
-    # ---------------------- UPCOMING (new) ----------------------
+    # ---------------------- UPCOMING ----------------------
     upcoming_matches, matchday_date = fetch_upcoming_matches(api_football_key)
 
     # Always write upcoming.json, even if empty, so the site never shows stale data
     save_upcoming_json(upcoming_matches, matchday_date)
 
+    upcoming_audio_skipped_for_credits = False
     if not upcoming_matches:
         log("No upcoming matches found — skipping upcoming script/audio generation.")
+    elif credit_tier == "critical":
+        # Prioritize the recap (the part people actually wait for) over the
+        # forward-looking preview when credits are this tight. The countdown
+        # angle picks back up automatically once credits reset or the plan
+        # is upgraded — nothing is lost, just deferred a day.
+        upcoming_audio_skipped_for_credits = True
+        log("Skipping Upcoming script/audio today — reserving remaining "
+            "credits for the recap due to critically low balance.")
     else:
         upcoming_script_text = generate_upcoming_script(upcoming_matches, matchday_date, anthropic_key)
 
@@ -775,9 +890,24 @@ def main():
             f.write(upcoming_script_text)
         log(f"Upcoming script also saved to {upcoming_script_path} for reference.")
 
-        generate_audio(upcoming_script_text, elevenlabs_key, "audio/today-upcoming.mp3")
+        try:
+            generate_audio(upcoming_script_text, elevenlabs_key, "audio/today-upcoming.mp3", UPCOMING_TTS_MODEL_ID)
+        except RuntimeError as e:
+            log(f"⚠️ Upcoming audio generation failed: {e}")
 
     log("Done.")
+
+    # Deliberately fail the Action when credits are critical, so the existing
+    # GitHub failure-email notification fires — even though the recap itself
+    # may have succeeded. This is the "warning" surfaced to a human, distinct
+    # from a genuine crash: the commit step below still runs either way.
+    if credit_tier == "critical" or recap_audio_failed:
+        sys.exit(
+            "ElevenLabs credits are critically low (or recap audio failed) — "
+            "this run is flagged so it reaches you by email, even though "
+            "the recap script/scores were generated normally. Check your "
+            "ElevenLabs balance."
+        )
 
 
 if __name__ == "__main__":
