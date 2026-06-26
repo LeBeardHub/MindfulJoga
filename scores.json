@@ -1,43 +1,43 @@
 [
   {
-    "home": "Switzerland",
-    "away": "Canada",
+    "home": "Ecuador",
+    "away": "Germany",
     "home_score": 2,
     "away_score": 1,
     "status": "final"
   },
   {
-    "home": "Bosnia & Herzegovina",
-    "away": "Qatar",
-    "home_score": 3,
-    "away_score": 1,
-    "status": "final"
-  },
-  {
-    "home": "Morocco",
-    "away": "Haiti",
-    "home_score": 4,
+    "home": "Cura\u00e7ao",
+    "away": "Ivory Coast",
+    "home_score": 0,
     "away_score": 2,
     "status": "final"
   },
   {
-    "home": "Scotland",
-    "away": "Brazil",
-    "home_score": 0,
-    "away_score": 3,
-    "status": "final"
-  },
-  {
-    "home": "Czechia",
-    "away": "Mexico",
-    "home_score": 0,
-    "away_score": 3,
-    "status": "final"
-  },
-  {
-    "home": "South Africa",
-    "away": "South Korea",
+    "home": "Japan",
+    "away": "Sweden",
     "home_score": 1,
+    "away_score": 1,
+    "status": "final"
+  },
+  {
+    "home": "Tunisia",
+    "away": "Netherlands",
+    "home_score": 1,
+    "away_score": 3,
+    "status": "final"
+  },
+  {
+    "home": "T\u00fcrkiye",
+    "away": "USA",
+    "home_score": 3,
+    "away_score": 2,
+    "status": "final"
+  },
+  {
+    "home": "Paraguay",
+    "away": "Australia",
+    "home_score": 0,
     "away_score": 0,
     "status": "final"
   }
