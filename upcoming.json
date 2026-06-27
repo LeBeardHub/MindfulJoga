@@ -1,35 +1,35 @@
 {
-  "matchday": "2026-06-26",
+  "matchday": "2026-06-27",
   "matches": [
     {
-      "home": "Senegal",
-      "away": "Iraq",
-      "kickoff_utc": "2026-06-26T15:00:00-04:00"
+      "home": "Croatia",
+      "away": "Ghana",
+      "kickoff_utc": "2026-06-27T17:00:00-04:00"
     },
     {
-      "home": "Norway",
-      "away": "France",
-      "kickoff_utc": "2026-06-26T15:00:00-04:00"
+      "home": "Panama",
+      "away": "England",
+      "kickoff_utc": "2026-06-27T17:00:00-04:00"
     },
     {
-      "home": "Uruguay",
-      "away": "Spain",
-      "kickoff_utc": "2026-06-26T20:00:00-04:00"
+      "home": "Colombia",
+      "away": "Portugal",
+      "kickoff_utc": "2026-06-27T19:30:00-04:00"
     },
     {
-      "home": "Cape Verde Islands",
-      "away": "Saudi Arabia",
-      "kickoff_utc": "2026-06-26T20:00:00-04:00"
+      "home": "Congo DR",
+      "away": "Uzbekistan",
+      "kickoff_utc": "2026-06-27T19:30:00-04:00"
     },
     {
-      "home": "Egypt",
-      "away": "Iran",
-      "kickoff_utc": "2026-06-26T23:00:00-04:00"
+      "home": "Algeria",
+      "away": "Austria",
+      "kickoff_utc": "2026-06-27T22:00:00-04:00"
     },
     {
-      "home": "New Zealand",
-      "away": "Belgium",
-      "kickoff_utc": "2026-06-26T23:00:00-04:00"
+      "home": "Jordan",
+      "away": "Argentina",
+      "kickoff_utc": "2026-06-27T22:00:00-04:00"
     }
   ]
 }
