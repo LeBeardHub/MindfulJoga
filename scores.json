@@ -1,44 +1,44 @@
 [
   {
-    "home": "Senegal",
-    "away": "Iraq",
-    "home_score": 5,
-    "away_score": 0,
-    "status": "final"
-  },
-  {
-    "home": "Norway",
-    "away": "France",
-    "home_score": 1,
-    "away_score": 4,
-    "status": "final"
-  },
-  {
-    "home": "Uruguay",
-    "away": "Spain",
-    "home_score": 0,
+    "home": "Croatia",
+    "away": "Ghana",
+    "home_score": 2,
     "away_score": 1,
     "status": "final"
   },
   {
-    "home": "Cape Verde Islands",
-    "away": "Saudi Arabia",
+    "home": "Panama",
+    "away": "England",
+    "home_score": 0,
+    "away_score": 2,
+    "status": "final"
+  },
+  {
+    "home": "Colombia",
+    "away": "Portugal",
     "home_score": 0,
     "away_score": 0,
     "status": "final"
   },
   {
-    "home": "Egypt",
-    "away": "Iran",
-    "home_score": 1,
+    "home": "Congo DR",
+    "away": "Uzbekistan",
+    "home_score": 3,
     "away_score": 1,
     "status": "final"
   },
   {
-    "home": "New Zealand",
-    "away": "Belgium",
+    "home": "Algeria",
+    "away": "Austria",
+    "home_score": 3,
+    "away_score": 3,
+    "status": "final"
+  },
+  {
+    "home": "Jordan",
+    "away": "Argentina",
     "home_score": 1,
-    "away_score": 5,
+    "away_score": 3,
     "status": "final"
   }
 ]

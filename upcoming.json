@@ -1,35 +1,10 @@
 {
-  "matchday": "2026-06-27",
+  "matchday": "2026-06-28",
   "matches": [
     {
-      "home": "Croatia",
-      "away": "Ghana",
-      "kickoff_utc": "2026-06-27T17:00:00-04:00"
-    },
-    {
-      "home": "Panama",
-      "away": "England",
-      "kickoff_utc": "2026-06-27T17:00:00-04:00"
-    },
-    {
-      "home": "Colombia",
-      "away": "Portugal",
-      "kickoff_utc": "2026-06-27T19:30:00-04:00"
-    },
-    {
-      "home": "Congo DR",
-      "away": "Uzbekistan",
-      "kickoff_utc": "2026-06-27T19:30:00-04:00"
-    },
-    {
-      "home": "Algeria",
-      "away": "Austria",
-      "kickoff_utc": "2026-06-27T22:00:00-04:00"
-    },
-    {
-      "home": "Jordan",
-      "away": "Argentina",
-      "kickoff_utc": "2026-06-27T22:00:00-04:00"
+      "home": "South Africa",
+      "away": "Canada",
+      "kickoff_utc": "2026-06-28T15:00:00-04:00"
     }
   ]
 }
