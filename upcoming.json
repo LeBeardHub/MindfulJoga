@@ -1,10 +1,20 @@
 {
-  "matchday": "2026-06-28",
+  "matchday": "2026-06-29",
   "matches": [
     {
-      "home": "South Africa",
-      "away": "Canada",
-      "kickoff_utc": "2026-06-28T15:00:00-04:00"
+      "home": "Brazil",
+      "away": "Japan",
+      "kickoff_utc": "2026-06-29T13:00:00-04:00"
+    },
+    {
+      "home": "Germany",
+      "away": "Paraguay",
+      "kickoff_utc": "2026-06-29T16:30:00-04:00"
+    },
+    {
+      "home": "Netherlands",
+      "away": "Morocco",
+      "kickoff_utc": "2026-06-29T21:00:00-04:00"
     }
   ]
 }
