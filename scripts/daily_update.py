@@ -335,6 +335,95 @@ def fetch_standings(api_key):
     return classified
 
 
+# Round names (lowercased) that are knockout rounds where a loss means
+# elimination outright -- i.e. NOT the semifinals, where losers get one more
+# match (the 3rd place playoff) before actually going home, and NOT the
+# 3rd-place playoff or Final themselves, which are handled separately.
+STRAIGHT_ELIMINATION_ROUNDS = ("round of 32", "round of 16", "quarter")
+
+
+def fetch_knockout_eliminations(api_key):
+    """Fetch every knockout-stage fixture played so far and determine which
+    teams have actually been eliminated by an on-pitch result, as distinct
+    from the group-stage-only classification fetch_standings() produces.
+
+    Single elimination applies from the Round of 32 through the
+    Quarterfinals: the loser of any of those matches is eliminated
+    immediately. The Semifinals are the one exception -- losing a semifinal
+    does NOT eliminate a team; they instead move on to play the other
+    semifinal loser in the 3rd place match. Only losing THAT match (or the
+    Final) ends a team's tournament.
+
+    Returns a dict of {team_name: "eliminated" | "playing for 3rd place" |
+    "advancing"} for any team found in a finished knockout fixture. Teams
+    not present in this dict simply haven't played a knockout match yet --
+    callers should fall back to the group-stage status from fetch_standings()
+    for those teams."""
+    headers = {"x-apisports-key": api_key}
+    params = {"league": WORLD_CUP_LEAGUE_ID, "season": WORLD_CUP_SEASON}
+
+    response = requests.get(f"{API_FOOTBALL_BASE}/fixtures", headers=headers, params=params)
+    if response.status_code != 200:
+        log(f"Knockout fixtures fetch error: {response.status_code}")
+        return {}
+
+    data = response.json()
+    fixtures = data.get("response", [])
+
+    # Sort by kickoff time before processing. The API does not guarantee
+    # fixtures are returned in chronological order, and this function relies
+    # on later results overriding earlier ones (e.g. a team's 3rd-place-match
+    # result must override their earlier "playing for 3rd place" status from
+    # the semifinal they lost) -- so processing out of order could silently
+    # leave a team's status stuck on a stale intermediate state.
+    fixtures.sort(key=lambda fx: fx["fixture"].get("timestamp") or 0)
+
+    knockout_status = {}
+    for fx in fixtures:
+        status_short = fx["fixture"]["status"]["short"]
+        if status_short not in ("FT", "AET", "PEN"):
+            continue  # only finished matches carry a real result
+
+        round_name = (fx.get("league", {}).get("round") or "").strip().lower()
+        is_group_stage = "group" in round_name
+        if is_group_stage:
+            continue  # fetch_standings() already handles the group stage
+
+        home = fx["teams"]["home"]["name"]
+        away = fx["teams"]["away"]["name"]
+        home_winner = fx["teams"]["home"].get("winner")
+        away_winner = fx["teams"]["away"].get("winner")
+
+        is_bronze_match = "3rd" in round_name or "third" in round_name
+        is_final = bool(re.search(r"\bfinal\b", round_name)) and not is_bronze_match
+        is_semifinal = "semi" in round_name
+        is_straight_elimination = any(r in round_name for r in STRAIGHT_ELIMINATION_ROUNDS)
+
+        if home_winner is None and away_winner is None:
+            continue  # draw recorded without a shootout winner yet (shouldn't
+                       # happen in knockouts, but don't guess if it does)
+
+        winner = home if home_winner else away
+        loser = away if home_winner else home
+
+        if is_final:
+            knockout_status[winner] = "champion"
+            knockout_status[loser] = "runner-up"
+        elif is_bronze_match:
+            knockout_status[winner] = "third place"
+            knockout_status[loser] = "fourth place"
+        elif is_semifinal:
+            # The exception to single elimination: semifinal losers are NOT
+            # eliminated yet -- they play each other for 3rd place first.
+            knockout_status[winner] = "advancing"
+            knockout_status[loser] = "playing for 3rd place"
+        elif is_straight_elimination:
+            knockout_status[winner] = "advancing"
+            knockout_status[loser] = "eliminated"
+
+    return knockout_status
+
+
 def fetch_goal_scorers(fixture_id, api_key):
     """Fetch the events for one fixture and return a short list of goal
     scorers (and own-goal info), used to add a couple of player names into
@@ -507,11 +596,18 @@ def build_match_summary(matches, days_ago=1):
     return "\n".join(lines)
 
 
-def build_standings_context(matches, standings):
+def build_standings_context(matches, standings, knockout_status=None):
     """Build a short qualification-status note for just the teams in the
     matches being recapped, so Claude can mention it naturally without
-    dumping all 48 teams' statuses into the script."""
-    if not standings:
+    dumping all 48 teams' statuses into the script.
+
+    knockout_status (from fetch_knockout_eliminations) takes priority over
+    the group-stage `standings` classification whenever a team appears in
+    both -- group-stage status is a snapshot frozen at the end of the group
+    stage, so once a team has actually played (and possibly lost) a
+    knockout match, that real result is what's true, not the old group
+    placement."""
+    if not standings and not knockout_status:
         return ""
 
     teams_in_play = set()
@@ -519,7 +615,9 @@ def build_standings_context(matches, standings):
         teams_in_play.add(m["home"])
         teams_in_play.add(m["away"])
 
-    status_by_team = {row["team"]: row["status"] for row in standings}
+    status_by_team = {row["team"]: row["status"] for row in (standings or [])}
+    if knockout_status:
+        status_by_team.update(knockout_status)  # knockout results win on overlap
 
     lines = []
     for team in teams_in_play:
@@ -532,9 +630,12 @@ def build_standings_context(matches, standings):
 
     return (
         "\n\nQualification status for teams in these matches "
-        "(advancing = through to the next round, eliminated = out of the "
-        "tournament, waiting = group stage not finished yet, status not "
-        "yet determined):\n" + "\n".join(lines)
+        "(advancing = through to the next round; eliminated = out of the "
+        "tournament; playing for 3rd place = lost their semifinal but plays "
+        "one more match for third, NOT eliminated yet; champion/runner-up/"
+        "third place/fourth place = tournament has concluded for that team; "
+        "waiting = group stage not finished yet, status not yet "
+        "determined):\n" + "\n".join(lines)
     )
 
 
@@ -645,7 +746,8 @@ def generate_finale_script(final_match, api_key, days_ago=1):
 def generate_script(matches, api_key, api_football_key, days_ago=1):
     match_summary = build_match_summary(matches, days_ago)
     standings = fetch_standings(api_football_key)
-    standings_context = build_standings_context(matches, standings)
+    knockout_status = fetch_knockout_eliminations(api_football_key)
+    standings_context = build_standings_context(matches, standings, knockout_status)
     today_str = datetime.now(EASTERN).strftime("%B %-d, %Y")  # e.g. "June 22, 2026"
     recency = describe_recency(days_ago)
     user_prompt = (
@@ -728,6 +830,34 @@ def generate_audio(script_text, api_key, output_path, model_id=TTS_MODEL_ID):
         raise RuntimeError(f"ffmpeg slowdown failed: {result.stderr}")
 
     log(f"Audio saved to {output_path}.")
+
+
+def archive_audio_copy(source_path, archive_subdir, date_str, label):
+    """Copy a freshly-generated audio file into a dated archive path,
+    e.g. audio/archive/2026-06-24-recap.mp3. This is purely additive — the
+    live site's player keeps reading today-male.mp3 / today-upcoming.mp3
+    exactly as before; this just preserves a permanent, browsable copy of
+    every day's episode alongside it, named so files sort naturally by date
+    in a GitHub folder listing.
+
+    `date_str` should be the date the episode was actually PUBLISHED (today),
+    not necessarily the date of the match being discussed -- this guarantees
+    a unique filename every single day even on a knockout rest day that
+    re-narrates an older result, since the archive's job is "what did the
+    site publish on this date," not "what match is this about."""
+    try:
+        archive_dir = os.path.join("audio", archive_subdir)
+        os.makedirs(archive_dir, exist_ok=True)
+        archive_path = os.path.join(archive_dir, f"{date_str}-{label}.mp3")
+        with open(source_path, "rb") as src, open(archive_path, "wb") as dst:
+            dst.write(src.read())
+        log(f"Archived a copy to {archive_path}.")
+    except Exception as e:
+        # Archiving should never take down the actual daily publish — if
+        # this fails for any reason, log it and move on; today-male.mp3 /
+        # today-upcoming.mp3 (the only files the live site reads) are
+        # already written successfully by this point regardless.
+        log(f"⚠️ Archiving failed (non-fatal, live site is unaffected): {e}")
 
 
 def save_scores_json(matches, output_path="scores.json"):
@@ -901,6 +1031,11 @@ def main():
     if missing:
         sys.exit(f"Missing required environment variable(s): {', '.join(missing)}")
 
+    # Sortable date string for this run, used to name archived audio copies
+    # (e.g. "2026-06-24") -- distinct from the human-readable date strings
+    # used elsewhere in scripts, since filenames need to sort naturally.
+    publish_date_str = datetime.now(EASTERN).strftime("%Y-%m-%d")
+
     # ---------------------- TOURNAMENT-OVER CHECK ----------------------
     # FINALE_MARKER_PATH is committed to the repo the day the finale episode
     # is published. Every run after that checks for it first and does
@@ -1005,6 +1140,7 @@ def main():
 
             try:
                 generate_audio(script_text, elevenlabs_key, "audio/today-male.mp3", TTS_MODEL_ID)
+                archive_audio_copy("audio/today-male.mp3", "archive", publish_date_str, "finale")
             except RuntimeError as e:
                 recap_audio_failed = True
                 log(f"⚠️ Finale audio generation failed: {e}")
@@ -1031,6 +1167,7 @@ def main():
 
             try:
                 generate_audio(script_text, elevenlabs_key, "audio/today-male.mp3", TTS_MODEL_ID)
+                archive_audio_copy("audio/today-male.mp3", "archive", publish_date_str, "recap")
             except RuntimeError as e:
                 # Even in the critical-credit case, attempt this — if it still
                 # fails (e.g. credits ran out between the check and now), don't
@@ -1073,6 +1210,7 @@ def main():
 
             try:
                 generate_audio(upcoming_script_text, elevenlabs_key, "audio/today-upcoming.mp3", UPCOMING_TTS_MODEL_ID)
+                archive_audio_copy("audio/today-upcoming.mp3", "archive", publish_date_str, "upcoming")
             except RuntimeError as e:
                 log(f"⚠️ Upcoming audio generation failed: {e}")
 
