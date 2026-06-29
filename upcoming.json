@@ -2,11 +2,6 @@
   "matchday": "2026-06-29",
   "matches": [
     {
-      "home": "Brazil",
-      "away": "Japan",
-      "kickoff_utc": "2026-06-29T13:00:00-04:00"
-    },
-    {
       "home": "Germany",
       "away": "Paraguay",
       "kickoff_utc": "2026-06-29T16:30:00-04:00"
