@@ -1,8 +1,22 @@
 [
   {
-    "home": "South Africa",
-    "away": "Canada",
-    "home_score": 0,
+    "home": "Brazil",
+    "away": "Japan",
+    "home_score": 2,
+    "away_score": 1,
+    "status": "final"
+  },
+  {
+    "home": "Germany",
+    "away": "Paraguay",
+    "home_score": 1,
+    "away_score": 1,
+    "status": "final"
+  },
+  {
+    "home": "Netherlands",
+    "away": "Morocco",
+    "home_score": 1,
     "away_score": 1,
     "status": "final"
   }
