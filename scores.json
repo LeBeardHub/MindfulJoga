@@ -1,21 +1,21 @@
 [
   {
-    "home": "England",
-    "away": "Congo DR",
+    "home": "Spain",
+    "away": "Austria",
+    "home_score": 3,
+    "away_score": 0,
+    "status": "final"
+  },
+  {
+    "home": "Portugal",
+    "away": "Croatia",
     "home_score": 2,
     "away_score": 1,
     "status": "final"
   },
   {
-    "home": "Belgium",
-    "away": "Senegal",
-    "home_score": 3,
-    "away_score": 2,
-    "status": "final"
-  },
-  {
-    "home": "USA",
-    "away": "Bosnia & Herzegovina",
+    "home": "Switzerland",
+    "away": "Algeria",
     "home_score": 2,
     "away_score": 0,
     "status": "final"
