@@ -1,20 +1,15 @@
 {
-  "matchday": "2026-07-03",
+  "matchday": "2026-07-04",
   "matches": [
     {
-      "home": "Australia",
-      "away": "Egypt",
-      "kickoff_utc": "2026-07-03T14:00:00-04:00"
+      "home": "Canada",
+      "away": "Morocco",
+      "kickoff_utc": "2026-07-04T13:00:00-04:00"
     },
     {
-      "home": "Argentina",
-      "away": "Cape Verde Islands",
-      "kickoff_utc": "2026-07-03T18:00:00-04:00"
-    },
-    {
-      "home": "Colombia",
-      "away": "Ghana",
-      "kickoff_utc": "2026-07-03T21:30:00-04:00"
+      "home": "Paraguay",
+      "away": "France",
+      "kickoff_utc": "2026-07-04T17:00:00-04:00"
     }
   ]
 }
