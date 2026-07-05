@@ -1,23 +1,16 @@
 [
   {
-    "home": "Australia",
-    "away": "Egypt",
-    "home_score": 1,
+    "home": "Canada",
+    "away": "Morocco",
+    "home_score": 0,
+    "away_score": 3,
+    "status": "final"
+  },
+  {
+    "home": "Paraguay",
+    "away": "France",
+    "home_score": 0,
     "away_score": 1,
-    "status": "final"
-  },
-  {
-    "home": "Argentina",
-    "away": "Cape Verde Islands",
-    "home_score": 3,
-    "away_score": 2,
-    "status": "final"
-  },
-  {
-    "home": "Colombia",
-    "away": "Ghana",
-    "home_score": 1,
-    "away_score": 0,
     "status": "final"
   }
 ]
