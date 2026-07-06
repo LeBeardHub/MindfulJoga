@@ -1,16 +1,16 @@
 [
   {
-    "home": "Canada",
-    "away": "Morocco",
-    "home_score": 0,
-    "away_score": 3,
+    "home": "Brazil",
+    "away": "Norway",
+    "home_score": 1,
+    "away_score": 2,
     "status": "final"
   },
   {
-    "home": "Paraguay",
-    "away": "France",
-    "home_score": 0,
-    "away_score": 1,
+    "home": "Mexico",
+    "away": "England",
+    "home_score": 2,
+    "away_score": 3,
     "status": "final"
   }
 ]
