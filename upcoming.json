@@ -2,11 +2,6 @@
   "matchday": "2026-07-07",
   "matches": [
     {
-      "home": "Argentina",
-      "away": "Egypt",
-      "kickoff_utc": "2026-07-07T12:00:00-04:00"
-    },
-    {
       "home": "Switzerland",
       "away": "Colombia",
       "kickoff_utc": "2026-07-07T16:00:00-04:00"
