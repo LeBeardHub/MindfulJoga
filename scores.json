@@ -1,15 +1,8 @@
 [
   {
-    "home": "Argentina",
-    "away": "Egypt",
-    "home_score": 3,
-    "away_score": 2,
-    "status": "final"
-  },
-  {
-    "home": "Switzerland",
-    "away": "Colombia",
-    "home_score": 0,
+    "home": "France",
+    "away": "Morocco",
+    "home_score": 2,
     "away_score": 0,
     "status": "final"
   }
