@@ -1,10 +1,10 @@
 {
-  "matchday": "2026-07-14",
+  "matchday": "2026-07-15",
   "matches": [
     {
-      "home": "France",
-      "away": "Spain",
-      "kickoff_utc": "2026-07-14T15:00:00-04:00"
+      "home": "England",
+      "away": "Argentina",
+      "kickoff_utc": "2026-07-15T15:00:00-04:00"
     }
   ]
 }
