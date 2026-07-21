@@ -1,10 +1,4 @@
 {
-  "matchday": "2026-07-19",
-  "matches": [
-    {
-      "home": "Spain",
-      "away": "Argentina",
-      "kickoff_utc": "2026-07-19T15:00:00-04:00"
-    }
-  ]
+  "matchday": null,
+  "matches": []
 }
