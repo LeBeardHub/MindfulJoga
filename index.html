@@ -532,27 +532,22 @@
 <main>
   <div class="headline">
     <h1>The mindful way to <em>fútbol</em></h1>
-    <p class="subline" id="sublineText">Your World Cup recap, calmly delivered every morning.</p>
+    <p class="subline" id="sublineText">This concludes our Mindful Joga World Cup 2026 edition.</p>
   </div>
 
   <div class="date-pill-inline" id="datePill"><span id="pillText">JUN 20</span></div>
 
-  <div class="mode-toggle" role="group" aria-label="Choose Recap or Upcoming">
-    <button class="active" id="modeRecap" data-mode="recap">Recap</button>
-    <button id="modeUpcoming" data-mode="upcoming">Upcoming</button>
-  </div>
-
   <div class="controls">
-    <button class="play-button" id="playButton" aria-label="Play today's recap">
+    <button class="play-button" id="playButton" aria-label="Play the finale recap">
       <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
       <svg id="pauseIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
     </button>
   </div>
 
   <div class="ritual-lines">
-    <p>Press play</p>
-    <p>Kick back</p>
-    <p>Enjoy</p>
+    <p>Thank you for listening.</p>
+    <p>Fútbol goes on.</p>
+    <p>See you in Uruguay&nbsp;2030.</p>
   </div>
 </main>
 
@@ -631,25 +626,12 @@
     requestAnimationFrame(frame);
   })();
 
-  // ---------- Recap / Upcoming mode-aware playback ----------
-  var AUDIO_FILES = {
-    recap: 'audio/today-male.mp3',
-    upcoming: 'audio/today-upcoming.mp3'
-  };
-  var currentMode = 'recap';
-
+  // ---------- Recap-only playback ----------
   var audioEl = document.getElementById('audioPlayer');
   var playButton = document.getElementById('playButton');
   var playIcon = document.getElementById('playIcon');
   var pauseIcon = document.getElementById('pauseIcon');
-  var modeRecapBtn = document.getElementById('modeRecap');
-  var modeUpcomingBtn = document.getElementById('modeUpcoming');
   var sublineText = document.getElementById('sublineText');
-
-  var SUBLINES = {
-    recap: 'Your World Cup recap, calmly delivered every morning.',
-    upcoming: "Today's matches, calmly laid out before they happen."
-  };
 
   function stopPlayback() {
     audioEl.pause();
@@ -659,23 +641,7 @@
     pauseIcon.style.display = 'none';
   }
 
-  function setMode(mode) {
-    if (mode === currentMode) return;
-    stopPlayback();
-    currentMode = mode;
-    audioEl.src = AUDIO_FILES[mode];
-    audioEl.load();
-    modeRecapBtn.classList.toggle('active', mode === 'recap');
-    modeUpcomingBtn.classList.toggle('active', mode === 'upcoming');
-    sublineText.textContent = SUBLINES[mode];
-    playButton.setAttribute('aria-label', mode === 'recap' ? "Play today's recap" : "Play upcoming matches");
-    refreshPill(); // defined below, in the cycling-pill section
-  }
-
-  modeRecapBtn.addEventListener('click', function () { setMode('recap'); });
-  modeUpcomingBtn.addEventListener('click', function () { setMode('upcoming'); });
-
-  audioEl.src = AUDIO_FILES.recap;
+  audioEl.src = 'audio/today-male.mp3';
   audioEl.load();
 
   playButton.addEventListener('click', function () {
@@ -728,15 +694,6 @@
     return [todayDateString()].concat(lines);
   }
 
-  function buildUpcomingSequence(payload) {
-    if (!payload || !Array.isArray(payload.matches) || payload.matches.length === 0) {
-      return [todayDateString()];
-    }
-    var lines = payload.matches.map(function (m) {
-      return shortCode(m.home) + ' vs ' + shortCode(m.away);
-    });
-    return [todayDateString()].concat(lines);
-  }
 
   function showNextPillItem() {
     pillText.classList.add('fading');
@@ -756,31 +713,18 @@
   }
 
   function refreshPill() {
-    // Always start on the date immediately, then upgrade to real data
-    // once (if) the fetch succeeds. Never shows stale data from the other mode.
     startPillCycle([todayDateString()]);
-
-    var file = currentMode === 'recap' ? 'scores.json' : 'upcoming.json';
-    // Cache-bust with a timestamp AND set cache: 'no-store' — belt and
-    // suspenders against both browser disk cache and CDN edge caching,
-    // since this file changes daily and a stale cached copy is worse
-    // than a fresh network request every time.
-    fetch(file + '?t=' + Date.now(), { cache: 'no-store' })
+    fetch('scores.json?t=' + Date.now(), { cache: 'no-store' })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (payload) {
-        if (!payload) return;
-        if (currentMode === 'recap' && Array.isArray(payload) && payload.length > 0) {
+        if (payload && Array.isArray(payload) && payload.length > 0) {
           startPillCycle(buildRecapSequence(payload));
-        } else if (currentMode === 'upcoming') {
-          startPillCycle(buildUpcomingSequence(payload));
         }
       })
-      .catch(function () {
-        // File not available — pill stays on the date only.
-      });
+      .catch(function () {});
   }
 
-  refreshPill(); // initial load, recap mode by default
+  refreshPill();
 
 </script>
 
